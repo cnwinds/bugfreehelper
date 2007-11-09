@@ -1,3 +1,5 @@
+#Manual Readme 使用手册
+
 = BugFreeHelper使用说明 =
 
 
