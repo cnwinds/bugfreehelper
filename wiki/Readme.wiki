@@ -1,4 +1,4 @@
-#Manual Readme 使用手册
+#Manual Readme
 
 = BugFreeHelper使用说明 =
 
