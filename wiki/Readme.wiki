@@ -33,6 +33,7 @@
   
 * 源码说明
 
+  1.5
   程序使用Delphi2007开发，项目包含的单元有：
     * SettingFrm.pas        设置窗口单元
     * MonitorBug.pas        监视Bug状态的核心单元
@@ -41,6 +42,15 @@
     * AboutFrm.pas          关于对话窗单元
     * WorkerThreadUnit.pas  线程管理单元
   编译好后的可执行文件可以使用aspack压缩，这样更像个绿色软件。
+
+  2.0
+  因为新版程序的工作原理和前版的不同，文件也有所变化：
+    * SettingFrm.pas        设置窗口单元
+    * MonitorBug.pas        监视Bug状态的核心单元
+    * MainFrm.pas           主程序单元
+    * ConfigUnit.pas        配置文件读写单元
+    * AboutFrm.pas          关于对话窗单元
+    * sndkey32.pas          模拟按键发送(Delphi5中的单元)
 
 * 关于作者
 
