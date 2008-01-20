@@ -3,11 +3,13 @@ program BugFreeHelper;
 uses
   Windows,
   Forms,
+  Ole2,
   MainFrm in 'MainFrm.pas' {BugFreeHelperForm},
   MonitorBug in 'MonitorBug.pas',
   SettingFrm in 'SettingFrm.pas' {SettingForm},
   ConfigUnit in 'ConfigUnit.pas',
-  AboutFrm in 'AboutFrm.pas' {AboutForm};
+  AboutFrm in 'AboutFrm.pas' {AboutForm},
+  sndkey32 in 'sndkey32.pas';
 
 {$R *.res}
 

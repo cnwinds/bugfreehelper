@@ -60,8 +60,6 @@ object AboutForm: TAboutForm
     Caption = #20851#38381
     TabOrder = 0
     OnClick = Button1Click
-    ExplicitLeft = 256
-    ExplicitTop = 177
   end
   object Memo1: TMemo
     Left = 72
@@ -74,7 +72,8 @@ object AboutForm: TAboutForm
       'BugFree Helper'
       ''
       'author:cnwinds'
-      'date:2006-11-26')
+      'email:cnwinds@163.com'
+      'date:2008-1-20')
     ReadOnly = True
     TabOrder = 1
   end
