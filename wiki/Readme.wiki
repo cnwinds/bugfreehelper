@@ -33,7 +33,7 @@
   
 * 源码说明
 
-  1.5
+  V1.x
   程序使用Delphi2007开发，项目包含的单元有：
     * SettingFrm.pas        设置窗口单元
     * MonitorBug.pas        监视Bug状态的核心单元
@@ -43,7 +43,7 @@
     * WorkerThreadUnit.pas  线程管理单元
   编译好后的可执行文件可以使用aspack压缩，这样更像个绿色软件。
 
-  2.0
+  V2.x
   因为新版程序的工作原理和前版的不同，文件也有所变化：
     * SettingFrm.pas        设置窗口单元
     * MonitorBug.pas        监视Bug状态的核心单元
