@@ -273,7 +273,7 @@ procedure TMonitorBug.Process;
   var
     HtmlDoc: IHTMLDocument3;
     HtmlElement: IHTMLElement;
-    HtmlElement3: IHTMLElement3;
+//    HtmlElement3: IHTMLElement3;
   begin
     CheckCloneWeb;
     try
@@ -281,12 +281,13 @@ procedure TMonitorBug.Process;
       begin
         // 设置查找条件为：指派给自己并且是激活状态的bug
         HtmlDoc := FHttp.Document as IHTMLDocument3;
-        HtmlElement := HtmlDoc.getElementById('Field1') as IHTMLElement;
-        HtmlElement.setAttribute('value', 'BugStatus', 0);
-        HtmlElement3 := HtmlDoc.getElementById('Field1') as IHTMLElement3;
-        HtmlElement3.fireEvent('onchange', EmptyParam); // 需要触发事件
-        HtmlElement := HtmlDoc.getElementById('Value1') as IHTMLElement;
-        HtmlElement.setAttribute('value', 'Active', 0);
+{ 对查找bug理解错误，以下代码不需要 }
+//        HtmlElement := HtmlDoc.getElementById('Field1') as IHTMLElement;
+//        HtmlElement.setAttribute('value', 'BugStatus', 0);
+//        HtmlElement3 := HtmlDoc.getElementById('Field1') as IHTMLElement3;
+//        HtmlElement3.fireEvent('onchange', EmptyParam); // 需要触发事件
+//        HtmlElement := HtmlDoc.getElementById('Value1') as IHTMLElement;
+//        HtmlElement.setAttribute('value', 'Active', 0);
         HtmlElement := HtmlDoc.getElementById('Value3') as IHTMLElement;
         HtmlElement.setAttribute('value', UserName, 0);
         // 设置在本页面返回结果
