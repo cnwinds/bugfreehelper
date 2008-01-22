@@ -73,7 +73,7 @@ object AboutForm: TAboutForm
       ''
       'author:cnwinds'
       'email:cnwinds@163.com'
-      'date:2008-1-20')
+      'date:2008-1-22')
     ReadOnly = True
     TabOrder = 1
   end

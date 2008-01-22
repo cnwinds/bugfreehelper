@@ -2,8 +2,8 @@ object BugFreeHelperForm: TBugFreeHelperForm
   Left = 0
   Top = 0
   Caption = 'BugFreeHelper'
-  ClientHeight = 206
-  ClientWidth = 339
+  ClientHeight = 262
+  ClientWidth = 410
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
