@@ -2,8 +2,8 @@ unit MonitorBug;
 
 interface
 
-uses SysUtils, StrUtils, Classes, Windows, Forms,
-     SHDocVw, mshtml, OleCtrls, ExtCtrls, Ole2, SndKey32;
+uses SysUtils, StrUtils, Classes, Windows, Forms, 
+     ShDocVw, mshtml, OleCtrls, ExtCtrls, Ole2, SndKey32;
 
 type
 
@@ -50,6 +50,8 @@ type
 
     FLastTickCount: DWORD;
 
+    FCount: DWORD;
+
     FTimer: TTimer;
 
     procedure SetState(Value: TMonitorBugStatue);
@@ -61,6 +63,9 @@ type
     procedure OnTimerProcess(Sender: TObject);
 
     function CheckCloneWeb: Boolean;
+
+    procedure CompleteEvent(ASender: TObject; const pDisp: System.IDispatch; 
+      var URL: OleVariant);
 
   public
     constructor Create(AOwner: TForm);
@@ -91,12 +96,28 @@ implementation
 
 { TMonitorBug }
 
+procedure TMonitorBug.CompleteEvent(ASender: TObject; const pDisp: System.IDispatch; 
+  var URL: OleVariant);
+var
+  HtmlDoc: IHTMLDocument3;
+  HtmlElement: IHTMLElement;
+begin
+  TWebBrowser(ASender).Stop;
+  // 通过IOleCommandTarget接口拦截不到ID OLECMDID_SHOWSCRIPTERROR命令
+  // 所以使用了该方法。
+  // 解决方法来自：http://support.microsoft.com/kb/317024/zh-cn
+  HtmlDoc := TWebBrowser(ASender).Document as IHTMLDocument3;
+  HtmlElement := HtmlDoc.documentElement;
+  HtmlElement.insertAdjacentHTML('afterBegin', 
+    '&#xa0;<SCRIPT For=''window'' Event=''onerror''>var noOp = null;</SCRIPT>');
+end;
+
 procedure TMonitorBug.CloneNewWindow;
 begin
   while not CheckCloneWeb do
     Application.ProcessMessages;
 
-  FCloneWeb.SetFocus;
+  try FCloneWeb.SetFocus; except { nothing } end;
   SendKeys('^n', False); // 模拟按下Ctrl+N，产生一个新的IE窗口
 end;
 
@@ -116,7 +137,6 @@ begin
     HtmlElement := HtmlDoc.getElementById('RightBottomFrame') as IHTMLElement;
     if HtmlElement <> nil then
     begin
-      FCloneWeb.Stop; // 防止脚本错误
       Result := True;
     end;
   end;
@@ -154,7 +174,8 @@ begin
   FCloneWeb.Width := 300;
   FCloneWeb.Height := 200;
   FCloneWeb.ParentWindow := FOwner.Handle;
-
+  FCloneWeb.OnDocumentComplete := CompleteEvent;
+  
   FTimer := nil;
 
   // Bug更新时间
@@ -196,8 +217,15 @@ procedure TMonitorBug.Process;
     if FHttp.ReadyState = READYSTATE_COMPLETE then
     begin
       try
-        // 准备登录
         HtmlDoc := FHttp.Document as IHTMLDocument3;
+        // 页面是否正常
+        HtmlElement := HtmlDoc.getElementById('ActionMessage') as IHTMLElement;
+        if HtmlElement = nil then
+        begin
+          SetState(mbsHttpFail);
+          Exit;
+        end;
+        // 准备登录
         HtmlForm := HtmlDoc.getElementById('LoginForm') as IHTMLFormElement;
         HtmlElement := HtmlForm.item('TestUserName', 0) as IHTMLElement;
         // 设置登录用户名和密码
@@ -215,7 +243,7 @@ procedure TMonitorBug.Process;
     end else
     begin
       // 等待登录页面是否超时
-      if ((GetTickCount - FLastTickCount) > 20 * 1000) then
+      if ((GetTickCount - FLastTickCount) > 30 * 1000) then
         SetState(mbsHttpFail);
     end;
   end;
@@ -229,34 +257,38 @@ procedure TMonitorBug.Process;
 
   procedure DoWaitLoginResult;
   const
-    LoginResponse_HtmlName = 'ActionMessage';
     LoginSuccess = '登录成功';
     LoginFail = '您的用户名或密码不正确。请重新输入!';
   var
     HtmlDoc: IHTMLDocument3;
     HtmlElement: IHTMLElement;
-    LoginResult: string;
   begin
     try
-      // 等待ajax的登录结果
-      HtmlDoc := FHttp.Document as IHTMLDocument3;
-      HtmlElement := HtmlDoc.getElementById(LoginResponse_HtmlName) as IHTMLElement;
-      if HtmlElement.innerText <> '' then
+      if FCount = 0 then // 等待ajax的登录结果
       begin
-        // 阻止登录页面转向
-        FHttp.Stop;
-        // 分析登录的结果
-        LoginResult := HtmlElement.innerText;
-        if LoginResult = LoginSuccess then
-          QueryBug
-        else
-          SetState(mbsLoginFail);
-      end else
+        HtmlDoc := FHttp.Document as IHTMLDocument3;
+        HtmlElement := HtmlDoc.getElementById('ActionMessage') as IHTMLElement;
+        if (HtmlElement <> nil) and
+            (HtmlElement.innerText <> '') then
+        begin
+          // 分析登录的结果
+          if HtmlElement.innerText = LoginSuccess then
+            Inc(FCount)
+          else
+            SetState(mbsLoginFail);
+        end;
+      end else if FCount = 1 then // 等待登录完全成功
       begin
-        // 等待登录结果是否超时
-        if ((GetTickCount - FLastTickCount) > 20 * 1000) then
-          SetState(mbsInit);
+        HtmlDoc := FHttp.Document as IHTMLDocument3;
+        HtmlElement := HtmlDoc.getElementById('ActionMessage') as IHTMLElement;
+        if (HtmlElement = nil) or
+            (HtmlElement.innerText <> LoginSuccess) then
+          QueryBug;
       end;
+
+      // 等待登录结果是否超时
+      if ((GetTickCount - FLastTickCount) > 20 * 1000) then
+        SetState(mbsInit);
     except
       SetState(mbsHttpFail);
     end;
@@ -275,12 +307,18 @@ procedure TMonitorBug.Process;
     HtmlElement: IHTMLElement;
 //    HtmlElement3: IHTMLElement3;
   begin
-    CheckCloneWeb;
     try
       if FHttp.ReadyState = READYSTATE_COMPLETE then
       begin
-        // 设置查找条件为：指派给自己并且是激活状态的bug
         HtmlDoc := FHttp.Document as IHTMLDocument3;
+        // bugfree的登录好像有问题，如果登录后不正常的话需要重新登录
+        HtmlElement := HtmlDoc.getElementById('PostQuery');
+        if HtmlElement = nil then
+        begin
+          SetState(mbsWaitLoginPage);
+          Exit;
+        end;
+        // 设置查找条件为：指派给自己的bug
 { 对查找bug理解错误，以下代码不需要 }
 //        HtmlElement := HtmlDoc.getElementById('Field1') as IHTMLElement;
 //        HtmlElement.setAttribute('value', 'BugStatus', 0);
@@ -307,7 +345,7 @@ procedure TMonitorBug.Process;
         end;
       end;
     except
-      QueryBug;
+      SetState(mbsInit);
     end;
   end;
 
@@ -318,7 +356,6 @@ procedure TMonitorBug.Process;
     StartPos, EndPos, BugCount: Integer;
     Html: string;
   begin
-    CheckCloneWeb;
     // 判断是否已经返回结果
     HtmlDoc := FHttp.Document as IHTMLDocument3;
     HtmlElement := HtmlDoc.getElementById('_PageTotal');
@@ -352,7 +389,7 @@ procedure TMonitorBug.Process;
 
   procedure DoLogout;
   begin
-    // todo 注销
+    // nothing
   end;
 
   procedure DoParamFail;
@@ -401,6 +438,7 @@ procedure TMonitorBug.SetState(Value: TMonitorBugStatue);
     FIsLogin := False;
     // 记录时间
     FLastTickCount := GetTickCount;
+    FCount := 0;
   end;
 
   procedure EnterWaitLoginResult;
@@ -434,6 +472,7 @@ procedure TMonitorBug.SetState(Value: TMonitorBugStatue);
   procedure EnterLogout;
   begin
     FIsLogin := False;
+    FHttp.Navigate(BugFreeUrl + '/Logout.php?Logout=Yes');
   end;
 
   procedure EnterParamFail;
