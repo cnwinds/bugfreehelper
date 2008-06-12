@@ -5,8 +5,7 @@ interface
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, StdCtrls, IdBaseComponent, IdComponent, IdTCPConnection, IdTCPClient,
-  IdHTTP, ExtCtrls, MonitorBug, Menus, ImgList, ShellAPI, OleCtrls, SHDocVw,
-  mshtml, ActiveX, IeConst;
+  IdHTTP, ExtCtrls, MonitorBug, Menus, ImgList, ShellAPI;
 
 type
   TBugFreeHelperForm = class(TForm)
@@ -67,6 +66,18 @@ procedure TBugFreeHelperForm.BugStatueChange(Sender: TObject; OldStatue,
   NewStatue: TMonitorBugStatue);
 begin
   case NewStatue of
+    mbsOffline:
+    begin
+      // nothing
+    end;
+    mbsLogining:
+    begin
+      // nothing
+    end;
+    mbsNormal: 
+    begin
+      // nothing
+    end;
     mbsParamFail:
     begin
       MainTrayIcon.BalloonHint := Format('当前的参数无法登陆服务器，请先设置参数', []);
@@ -95,14 +106,14 @@ procedure TBugFreeHelperForm.CreateMonitor;
 begin
   if FMonitorBug <> nil then DestroyMonitor;
 
-  FMonitorBug := TMonitorBug.Create(Self);
+  FMonitorBug := TMonitorBug.Create;
   FMonitorBug.BugFreeUrl := Config.BugFreeUrl;
   FMonitorBug.UserName := Config.UserName;
   FMonitorBug.UserPWD := Config.UserPWD;
   FMonitorBug.UpdateIntervalSec := Config.UpdateIntervalSec;
   FMonitorBug.BugChangeNotify := BugCountChange;
   FMonitorBug.BugStatueChangeNotify := BugStatueChange;
-
+    
   FMonitorBug.Start;
 end;
 
@@ -111,6 +122,7 @@ begin
   if FMonitorBug <> nil then
   begin
     FMonitorBug.Stop;
+    FMonitorBug.Join;
     FreeAndNil(FMonitorBug);
   end;
 end;
@@ -134,8 +146,12 @@ begin
 end;
 
 procedure TBugFreeHelperForm.OpenBrowser(Sender: TObject);
+var
+  Url: string;
 begin
-  FMonitorBug.CloneNewWindow;
+  Url := Format('%s\index.php?BugUserName=%s&BugUserPWD=%s',
+                [Config.BugFreeUrl, Config.UserName, Config.UserPWD]);
+  ShellExecute(0, 'open', PChar(Url), nil, nil, SW_SHOW);
 end;
 
 procedure TBugFreeHelperForm.OpenSetting(Sender: TObject);
@@ -166,20 +182,20 @@ begin
     Exit;
   end;
 
-  case FMonitorBug.State of
-    mbsInit:
+  case FMonitorBug.Statue of
+    mbsOffline:
     begin
       MainTrayIcon.Icons := ImageList1;
       MainTrayIcon.Animate := False;
       MainTrayIcon.IconIndex := 0;
     end;
-    mbsWaitLoginPage, mbsWaitLoginResult:
+    mbsLogining: 
     begin
       MainTrayIcon.Icons := ImageList1;
       MainTrayIcon.Animate := False;
       MainTrayIcon.IconIndex := (MainTrayIcon.IconIndex + 1) mod 2
     end;
-    mbsIdel, mbsWaitQueryPage, mbsWaitQueryResult:
+    mbsNormal:
     begin
       if FMonitorBug.BugCount = 0 then
       begin
@@ -192,7 +208,19 @@ begin
         MainTrayIcon.Animate := True;
       end;
     end;
-    mbsParamFail, mbsLoginFail, mbsHttpFail:
+    mbsParamFail:
+    begin
+      MainTrayIcon.Icons := ImageList1;
+      MainTrayIcon.Animate := False;
+      MainTrayIcon.IconIndex := 2;
+    end;
+    mbsLoginFail:
+    begin
+      MainTrayIcon.Icons := ImageList1;
+      MainTrayIcon.Animate := False;
+      MainTrayIcon.IconIndex := 2;
+    end;
+    mbsHttpFail:
     begin
       MainTrayIcon.Icons := ImageList1;
       MainTrayIcon.Animate := False;
@@ -202,21 +230,6 @@ begin
 end;
 
 procedure TBugFreeHelperForm.MainPopupMenuPopup(Sender: TObject);
-const
-  MenuTipInfo: array[0..11] of string = (
-    '准备登陆',
-    '正在等待登录页面返回...)',
-    '正在验证登陆，耐心等一下 :)',
-    '恭喜你[%s]，没有你的Bug',
-    '[%s]未解决Bug%d个...',
-    '正在获取最新的bug数...',
-    '请设置必要的参数...',
-    '[%s]密码设错误，赶紧重新设置...',
-    '访问服务器失败',
-
-    '版本[%d.%d]beta3...',
-    '设置参数...',
-    '退出');
 var
   Ver: Cardinal;
 
@@ -227,73 +240,50 @@ var
     Result.OnClick := Event;
   end;
 
-  procedure AddMenuItem(Caption: string; Event: TNotifyEvent);
-  begin
-    MainPopupMenu.Items.Add(CreateMenuItem(Caption, Event));
-  end;
-
 begin
   MainPopupMenu.Items.Clear;
 
   Ver := GetFileVersion(Application.ExeName);
-
-  AddMenuItem(Format(MenuTipInfo[9], [Ver shr 16, Ver and $ffff]),
-    ShowAboutForm);
-  AddMenuItem(Format('-', []), nil);
+  MainPopupMenu.Items.Add(CreateMenuItem(Format('版本[%d.%d] %s...', [Ver shr 16, Ver and $ffff, FMonitorBug.Ver]), ShowAboutForm));
+  MainPopupMenu.Items.Add(CreateMenuItem(Format('-', []), nil));
 
   if FMonitorBug <> nil then
   begin
-    case FMonitorBug.State of
-      mbsInit:
+    case FMonitorBug.Statue of
+      mbsOffline:
       begin
-        AddMenuItem(Format(MenuTipInfo[0], []), nil);
+        MainPopupMenu.Items.Add(CreateMenuItem(Format('准备登陆', []), nil));
       end;
-      mbsWaitLoginPage:
+      mbsLogining:
       begin
-        AddMenuItem(Format(MenuTipInfo[1], []), nil);
+        MainPopupMenu.Items.Add(CreateMenuItem(Format('正在登陆中，耐心等一下 :)', []), nil));
       end;
-      mbsWaitLoginResult:
-      begin
-        AddMenuItem(Format(MenuTipInfo[2], []), nil);
-      end;
-      mbsIdel:
+      mbsNormal:
       begin
         if FMonitorBug.BugCount = 0 then
-          AddMenuItem(Format(MenuTipInfo[3],
-            [FMonitorBug.UserName, FMonitorBug.BugCount]), OpenBrowser)
+          MainPopupMenu.Items.Add(CreateMenuItem(Format('恭喜你[%s]，没有你的Bug', [FMonitorBug.UserName, FMonitorBug.BugCount]), OpenBrowser))
         else
-          AddMenuItem(Format(MenuTipInfo[4],
-            [FMonitorBug.UserName, FMonitorBug.BugCount]), OpenBrowser);
-      end;
-      mbsWaitQueryPage, mbsWaitQueryResult:
-      begin
-        if FMonitorBug.BugCount = 0 then
-          AddMenuItem(Format(MenuTipInfo[5],
-            [FMonitorBug.UserName, FMonitorBug.BugCount]), OpenBrowser)
-        else
-          AddMenuItem(Format(MenuTipInfo[4],
-            [FMonitorBug.UserName, FMonitorBug.BugCount]), OpenBrowser);
+          MainPopupMenu.Items.Add(CreateMenuItem(Format('[%s]未解决Bug%d个...', [FMonitorBug.UserName, FMonitorBug.BugCount]), OpenBrowser));
       end;
       mbsParamFail:
       begin
-        AddMenuItem(Format(MenuTipInfo[6], []), OpenSetting);
+        MainPopupMenu.Items.Add(CreateMenuItem(Format('请设置必要的参数...', []), OpenSetting));
       end;
       mbsLoginFail:
       begin
-        AddMenuItem(Format(MenuTipInfo[7],
-          [FMonitorBug.UserName]), OpenSetting)
+        MainPopupMenu.Items.Add(CreateMenuItem(Format('[%s]密码设错误，赶紧重新设置...', [FMonitorBug.UserName]), OpenSetting))
       end;
       mbsHttpFail:
       begin
-        AddMenuItem(Format(MenuTipInfo[8], []), OpenSetting);
+        MainPopupMenu.Items.Add(CreateMenuItem(Format('访问服务器失败', []), OpenSetting));
       end;
     end;
   end;
 
-  AddMenuItem('-', nil);
-  AddMenuItem(MenuTipInfo[10], OpenSetting);
-  AddMenuItem('-', nil);
-  AddMenuItem(MenuTipInfo[11], MainClose);
+  MainPopupMenu.Items.Add(CreateMenuItem('-', nil));
+  MainPopupMenu.Items.Add(CreateMenuItem('设置参数...', OpenSetting));
+  MainPopupMenu.Items.Add(CreateMenuItem('-', nil));
+  MainPopupMenu.Items.Add(CreateMenuItem('退出', MainClose));
 end;
 
 end.
