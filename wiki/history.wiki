@@ -1,5 +1,10 @@
 #BugFreeHelper release history
 
+= 2.1 2008-6-12 =
+{{{
+ * 使用TCP方式获取Bug数，改进了内存占用量和访问速度，主要是稳定性增强。
+}}}
+
 = 2.0 beta3 2008-1-22 =
 {{{
  * 打包中的reademe.txt改名成readme.txt
