@@ -27,7 +27,9 @@ type
     procedure CreateMonitor;
     procedure DestroyMonitor;
 
-    procedure BugCountChange(Sender: TObject; OldCount, NewCount: Integer);
+    procedure BugCountChange(Sender: TObject;
+      OldUnclosedBugCount, NewUnclosedBugCount: Integer;
+      OldUnresolvedBugCount, NewUnresolvedBugCount: Integer);
     procedure BugStatueChange(Sender: TObject; OldStatue, NewStatue: TMonitorBugStatue);
   public
     { Public declarations }
@@ -46,17 +48,20 @@ uses SettingFrm, ConfigUnit, AboutFrm;
 
 {$R *.dfm}
 
-procedure TBugFreeHelperForm.BugCountChange(Sender: TObject; OldCount,
-  NewCount: Integer);
+procedure TBugFreeHelperForm.BugCountChange(Sender: TObject;
+    OldUnclosedBugCount, NewUnclosedBugCount: Integer;
+    OldUnresolvedBugCount, NewUnresolvedBugCount: Integer);
 begin
   MainTrayIcon.BalloonTitle := '';
 
-  if NewCount = 0 then
+  if NewUnclosedBugCount = 0 then
     MainTrayIcon.BalloonHint := Format('太好了，你已经清除了所有你的Bug :)', [])
-  else if OldCount < NewCount then
-    MainTrayIcon.BalloonHint := Format('注意：新发现了%d个Bug，现在你共有%d个Bug', [NewCount - OldCount, NewCount])
+  else if OldUnclosedBugCount < NewUnclosedBugCount then
+    MainTrayIcon.BalloonHint := Format('注意：新发现了%d个Bug，现在你共有%d个Bug',
+      [NewUnclosedBugCount - OldUnclosedBugCount, NewUnclosedBugCount])
   else
-    MainTrayIcon.BalloonHint := Format('恭喜了，减少了%d个Bug，现在你共有%d个Bug', [OldCount - NewCount, NewCount]);
+    MainTrayIcon.BalloonHint := Format('恭喜了，减少了%d个Bug，现在你共有%d个Bug',
+      [OldUnclosedBugCount - NewUnclosedBugCount, NewUnclosedBugCount]);
   MainTrayIcon.BalloonTimeout := 5000;
   MainTrayIcon.BalloonFlags := bfInfo;
   MainTrayIcon.ShowBalloonHint;
@@ -197,7 +202,7 @@ begin
     end;
     mbsNormal:
     begin
-      if FMonitorBug.BugCount = 0 then
+      if FMonitorBug.UnclosedBugCount = 0 then
       begin
         MainTrayIcon.Icons := ImageList1;
         MainTrayIcon.Animate := False;
@@ -260,10 +265,12 @@ begin
       end;
       mbsNormal:
       begin
-        if FMonitorBug.BugCount = 0 then
-          MainPopupMenu.Items.Add(CreateMenuItem(Format('恭喜你[%s]，没有你的Bug', [FMonitorBug.UserName, FMonitorBug.BugCount]), OpenBrowser))
-        else
-          MainPopupMenu.Items.Add(CreateMenuItem(Format('[%s]未解决Bug%d个...', [FMonitorBug.UserName, FMonitorBug.BugCount]), OpenBrowser));
+        if FMonitorBug.UnclosedBugCount = 0 then
+          MainPopupMenu.Items.Add(CreateMenuItem(Format('恭喜你[%s]，没有你的Bug', [FMonitorBug.UserName]), OpenBrowser))
+        else begin
+          MainPopupMenu.Items.Add(CreateMenuItem(Format('[%s]未关闭Bug%d个...', [FMonitorBug.UserName, FMonitorBug.UnclosedBugCount]), OpenBrowser));
+          MainPopupMenu.Items.Add(CreateMenuItem(Format('[%s]未解决Bug%d个...', [FMonitorBug.UserName, FMonitorBug.UnresolvedBugCount]), OpenBrowser));
+        end;
       end;
       mbsParamFail:
       begin
