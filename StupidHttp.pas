@@ -136,7 +136,6 @@ var
   Host: string;
   Port: string;
   Request: string;
-  Post: string;
   I, PostLen: Integer;
   Header, Body: TStrings;
 begin
