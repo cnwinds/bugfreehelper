@@ -13,7 +13,8 @@ type
                         mbsLoginFail,   // 登陆失败
                         mbsHttpFail);   // 访问服务器失败
 
-  TBugCountChangeNotify = procedure(Sender: TObject; OldCount, NewCount: Integer) of object;
+  TBugCountChangeNotify = procedure(Sender: TObject; OldUnclosedBugCount, NewUnclosedBugCount: Integer;
+                                    OldUnresolvedBugCount, NewUnresolvedBugCount: Integer) of object;
 
   TBugStatueChangeNotify = procedure(Sender: TObject; OldStatue, NewStatue: TMonitorBugStatue) of object;
 
@@ -25,7 +26,8 @@ type
 
     FIsLogin: Boolean;
     FLastUpdateTime: TDateTime;
-    FBugCount: Integer;
+    FUnclosedBugCount: Integer;
+    FUnresolvedBugCount: Integer;
     FMonitorBugStatue: TMonitorBugStatue;
 
     Http: TStupidHttp;
@@ -42,7 +44,7 @@ type
     procedure AfterRun; override;
 
     function Login: Boolean;
-    function GetBugCount(var Count: Integer): Boolean;
+    function GetBugCount(var UnclosedBugCount, UnresolvedBugCount: Integer): Boolean;
     function Logout: Boolean;
 
   public
@@ -57,7 +59,8 @@ type
 
     property IsLogin: Boolean read FIsLogin;
     property LastUpdateTime: TDateTime read FLastUpdateTime;
-    property BugCount: Integer read FBugCount;
+    property UnclosedBugCount: Integer read FUnclosedBugCount;  // 未关闭bug
+    property UnresolvedBugCount: Integer read FUnresolvedBugCount; // 未解决bug
     property Statue: TMonitorBugStatue read FMonitorBugStatue;
 
     property BugChangeNotify: TBugCountChangeNotify read FBugChangeNotify write FBugChangeNotify;
@@ -77,7 +80,8 @@ begin
   // Bug更新时间
   SleepTime := 10 * 1000;
   FIsLogin := False;
-  FBugCount := 0;
+  FUnclosedBugCount := 0;
+  FUnresolvedBugCount := 0;
   
   SetStatue(mbsOffline);
 
@@ -120,36 +124,53 @@ begin
   Result := True;
 end;
 
-function TMonitorBug.GetBugCount(var Count: Integer): Boolean;
+function TMonitorBug.GetBugCount(var UnclosedBugCount, UnresolvedBugCount: Integer): Boolean;
 const
-  PostParam = 'AutoComplete=on&AndOr0=And&Field0=ProjectName&Operator0=%3D&' +
+  UnclosedBugCountParam = 'AutoComplete=on&AndOr0=And&Field0=ProjectName&Operator0=%3D&' +
   'Value0=&AndOrGroup=AND&AndOr1=And&Field1=OpenedBy&Operator1=%3D&Value1=&' +
   'AndOr2=And&Field2=ModulePath&Operator2=LIKE&Value2=&AndOr3=And&' +
   'Field3=AssignedTo&Operator3=%3D&Value3=${username}&AndOr4=And&' +
   'Field4=BugID&Operator4=%3D&Value4=&AndOr5=And&Field5=BugTitle&' +
   'Operator5=LIKE&Value5=&PostQuery=%E6%8F%90%E4%BA%A4%E6%9F%A5%E8%AF%A2%E5%86%85%E5%AE%B9&QueryType=Bug';
-var
-  Html: string;
-  StartIndex: Integer;
-  RecordStr: string;
-  Param: TParamList;
-begin
-  Result := False;
-  Param := TParamList.Create;
-  try
-    Param.SetParam('${post}', PostParam);
-    Param.SetParam('${username}', UserName);
-    Html := Http.Post(BugFreeUrl + '/BugList.php', Param);
-    TParamList.FindSubStr(Html, '<td style="text-align:left;border:0;width:30%">'#13#10, #13#10, Html);
-    StartIndex := Pos('/', Html);
-    if StartIndex <= 0 then Exit;
-    StartIndex := StartIndex + 1;
-    RecordStr := MidStr(Html, StartIndex, MaxInt);
-    Count := StrToIntDef(RecordStr, 0);
-  finally
-    FreeAndNil(Param);
+
+  UnresolvedBugParam = 'AutoComplete=on&AndOr0=And&Field0=BugStatus&Operator0=%3D&' +
+  'Value0=Active&AndOrGroup=AND&AndOr1=And&Field1=OpenedBy&Operator1=%3D&Value1=&' +
+  'AndOr2=And&Field2=ModulePath&Operator2=LIKE&Value2=&AndOr3=And&' +
+  'Field3=AssignedTo&Operator3=%3D&Value3=${username}&AndOr4=And&' +
+  'Field4=BugID&Operator4=%3D&Value4=&AndOr5=And&Field5=BugTitle&' +
+  'Operator5=LIKE&Value5=&PostQuery=%E6%8F%90%E4%BA%A4%E6%9F%A5%E8%AF%A2%E5%86%85%E5%AE%B9&QueryType=Bug';
+
+  function GetBugCount(PostParam: string; var BugCount: Integer): Boolean;
+  var
+    Param: TParamList;
+    Html: string;
+    StartIndex: Integer;
+    RecordStr: string;
+  begin
+    Result := False;
+    Param := TParamList.Create;
+    try
+      Param.SetParam('${post}', PostParam);
+      Param.SetParam('${username}', UserName);
+      Html := Http.Post(BugFreeUrl + '/BugList.php', Param);
+      TParamList.FindSubStr(Html, '<td style="text-align:left;border:0;width:30%">'#13#10, #13#10, Html);
+      StartIndex := Pos('/', Html);
+      if StartIndex <= 0 then Exit;
+      StartIndex := StartIndex + 1;
+      RecordStr := MidStr(Html, StartIndex, MaxInt);
+      BugCount := StrToIntDef(RecordStr, 0);
+      Result := True;
+    finally
+      FreeAndNil(Param);
+    end;
   end;
-  Result := True;
+  
+begin
+  if GetBugCount(UnclosedBugCountParam, UnclosedBugCount) and
+    GetBugCount(UnresolvedBugParam, UnresolvedBugCount) then
+    Result := True
+  else
+    Result := False;
 end;
 
 function TMonitorBug.Logout: Boolean;
@@ -168,7 +189,7 @@ end;
 
 procedure TMonitorBug.Process;
 var
-  BugCount: Integer;
+  UnclosedBugCount, UnresolvedBugCount: Integer;
 begin
   case FMonitorBugStatue of
     mbsOffline:
@@ -198,15 +219,17 @@ begin
     mbsNormal:
     begin
       try
-        if GetBugCount(BugCount) then
+        if GetBugCount(UnclosedBugCount, UnresolvedBugCount) then
         begin
           try
-            if (FBugCount <> BugCount) and Assigned(BugChangeNotify) then
-              BugChangeNotify(Self, FBugCount, BugCount);
+            if ((FUnclosedBugCount <> UnclosedBugCount) or (FUnresolvedBugCount <> UnresolvedBugCount)) then
+              if Assigned(BugChangeNotify) then
+                BugChangeNotify(Self, FUnclosedBugCount, UnclosedBugCount, FUnresolvedBugCount, UnresolvedBugCount);
           except
             // nothing
           end;
-          FBugCount := BugCount;
+          FUnclosedBugCount := UnclosedBugCount;
+          FUnresolvedBugCount := UnresolvedBugCount;
           FLastUpdateTime := Now;
         end else
         begin
