@@ -9,7 +9,9 @@ uses
   SettingFrm in 'SettingFrm.pas' {SettingForm},
   ConfigUnit in 'ConfigUnit.pas',
   AboutFrm in 'AboutFrm.pas' {AboutForm},
-  sndkey32 in 'sndkey32.pas';
+  ParamUnit in 'ParamUnit.pas',
+  StupidHttp in 'StupidHttp.pas',
+  WorkerThreadUnit in 'WorkerThreadUnit.pas';
 
 {$R *.res}
 
