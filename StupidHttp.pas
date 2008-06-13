@@ -2,7 +2,8 @@ unit StupidHttp;
 
 interface
 
-uses IdTCPClient, SysUtils, Classes, StrUtils, ParamUnit, IdURI;
+uses IdTCPClient, SysUtils, Classes, StrUtils, ParamUnit, IdURI, ConfigUnit,
+  Wininet;
 
 type
 
@@ -10,6 +11,7 @@ type
   private
     FTCPClient: TIdTCPClient;
     FGlobalParams: TParamList;
+    FCookies: TParamList;
     procedure ReadHttpResponse(var Header, Body: TStrings);
 
   protected
@@ -23,6 +25,9 @@ type
     function Get(Url: string): string;
 
     function Post(Url: string; Params: TParamList): string;
+
+    procedure SetIESessionCookie;
+    procedure ClearIESessionCookie;
   end;
 implementation
 
@@ -39,6 +44,7 @@ const
 constructor TStupidHttp.Create(const Version: string);
 begin
   FGlobalParams := TParamList.Create;
+  FCookies := TParamList.Create;
   FTCPClient := TIdTCPClient.Create(nil);
 
   FGlobalParams.SetParam(ParamVersion, Version);
@@ -48,13 +54,14 @@ end;
 destructor TStupidHttp.Destroy;
 begin
   FreeAndNil(FTCPClient);
+  FreeAndNil(FCookies);
   FreeAndNil(FGlobalParams);
 end;
 
 procedure TStupidHttp.ReadHttpResponse(var Header, Body: TStrings);
 var
   Line: string;
-  OldCookie, Cookie: string;
+  Cookie: string;
 begin
   // read header
   Header.Clear;
@@ -65,14 +72,30 @@ begin
     Header.Add(Line);
     if TParamList.FindSubStr(Line, 'Set-Cookie: ', ' path=/', Cookie) then
     begin
-      FGlobalParams.GetParam(ParamCookies, OldCookie);
-      Cookie := OldCookie + Cookie;
-      FGlobalParams.SetParam(ParamCookies, Cookie);
+      FCookies.SetList(Cookie, ';');
+      FGlobalParams.SetParam(ParamCookies, FCookies.GetList('; '));
     end;
   end;
   // read body
   Body.Clear;
   Body.Text := FTCPClient.IOHandler.AllData;
+end;
+
+procedure TStupidHttp.SetIESessionCookie;
+var
+  Cookie: string;
+begin
+  FCookies.GetParam('PHPSESSID', Cookie);
+  Cookie := 'PHPSESSID=' + Cookie + '; expires=Sun, 22-Feb-2099 08:08:08 GMT';
+  InternetSetCookie(PChar(Config.BugFreeUrl + '/'), nil, PChar(Cookie));
+end;
+
+procedure TStupidHttp.ClearIESessionCookie;
+var
+  Cookie: string;
+begin
+  Cookie := 'PHPSESSID=0; expires=Sun, 22-Feb-2099 08:08:08 GMT';
+  InternetSetCookie(PChar(Config.BugFreeUrl + '/'), nil, PChar(Cookie));
 end;
 
 function TStupidHttp.DoGet(const Params: TParamList): string;

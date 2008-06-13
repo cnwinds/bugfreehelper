@@ -68,7 +68,8 @@ begin
   AutoRun(Config.AutoStart);
 
   FDirty := False;
-  MessageBox(Application.Handle, '参数已经保存！', '提示', MB_OK + MB_ICONINFORMATION);
+//  MessageBox(Application.Handle, '参数已经保存！', '提示', MB_OK + MB_ICONINFORMATION);
+  Close;
 end;
 
 procedure TSettingForm.Button2Click(Sender: TObject);
