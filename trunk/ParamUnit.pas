@@ -19,6 +19,7 @@ type
     FList: TStrings;
 
     function GetCount: Integer;
+    procedure SetKeyValue(S: string);
   public
     constructor Create;
     destructor Destroy; override;
@@ -26,6 +27,9 @@ type
     procedure SetParam(const Key, Value: string);
     function GetParam(const Key: string; var Value: string): Boolean; overload;
     function GetParam(Index: Integer; var Key: string; var Value: string): Boolean; overload;
+    function GetList(const Split: string): string;
+    procedure SetList(const S, Split: string);
+    procedure Clear;
     property Count: Integer read GetCount;
 
     function ReplaceAllParam(const S: string): string;
@@ -36,6 +40,23 @@ type
 implementation
 
 { TParam }
+
+procedure TParamList.SetKeyValue(S: string);
+var
+  I: Integer;
+  Key, Value: string;
+begin
+  I := Pos('=', S);
+  if I <= 0 then Exit;
+  Key := LeftStr(S, I - 1);
+  Value := MidStr(S, I + 1, MaxInt);
+  SetParam(Key, Value);
+end;
+
+procedure TParamList.Clear;
+begin
+  FList.Clear;
+end;
 
 constructor TParamList.Create;
 begin
@@ -51,6 +72,35 @@ end;
 function TParamList.GetCount: Integer;
 begin
   Result := FList.Count;
+end;
+
+function TParamList.GetList(const Split: string): string;
+var
+  I: Integer;
+begin
+  Result := '';
+  if Count = 0 then Exit;
+
+  for I := 0 to Count - 2 do
+  begin
+    Result := Result + FList[I] + Split;
+  end;
+  Result := Result + FList[Count - 1];
+end;
+
+procedure TParamList.SetList(const S, Split: string);
+var
+  B, E: Integer;
+begin
+  B := 1;
+  E := 0;
+  while E < Length(S) do
+  begin
+    E := PosEx(Split, S, E + 1);
+    if E = 0 then E := Length(S) + 1;
+    SetKeyValue(MidStr(S, B, E - B));
+    B := E + 1;
+  end;
 end;
 
 function TParamList.GetParam(Index: Integer; var Key: string; var Value: string): Boolean;
@@ -88,11 +138,11 @@ procedure TParamList.SetParam(const Key, Value: string);
 var
   I: Integer;
 begin
-  I := FList.IndexOfName(Key);
+  I := FList.IndexOfName(Trim(Key));
   if (I <> -1) then FList.Delete(I);
-  FList.Add(Key + '=' + Value);
+  FList.Add(Trim(Key) + '=' + Value);
 end;
-  
+
 function TParamList.ReplaceAllParam(const S: string): string;
 var
   I: Integer;

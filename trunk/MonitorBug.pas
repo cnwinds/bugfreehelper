@@ -2,7 +2,8 @@ unit MonitorBug;
 
 interface
 
-uses Forms, WorkerThreadUnit, StupidHttp, ParamUnit, SysUtils, StrUtils, Classes;
+uses Forms, WorkerThreadUnit, StupidHttp, ParamUnit, SysUtils, StrUtils,
+  Classes, ShellAPI, Windows, ConfigUnit, EncodeUnit;
 
 type
 
@@ -20,10 +21,6 @@ type
 
   TMonitorBug = class(TCustomWorkerThread)
   private
-    FBugFreeUrl: string;
-    FUserName: string;
-    FUserPWD: string;
-
     FIsLogin: Boolean;
     FLastUpdateTime: TDateTime;
     FUnclosedBugCount: Integer;
@@ -35,33 +32,37 @@ type
     FBugStatueChangeNotify: TBugStatueChangeNotify;
     FVer: string;
 
+    FUnclosedBugList: TParamList;
+    FUnresolvedBugList: TParamList;
+
     procedure SetStatue(Value: TMonitorBugStatue);
-    function GetUpdateIntervalSec: Integer;
-    procedure SetUpdateIntervalSec(const Value: Integer);
+    function GetBugCount(Html: string; var BugCount: Integer): Boolean;
+    function GetBugList(Html: string; var List: TParamList): Boolean;
 
   protected
     procedure Process; override;
     procedure AfterRun; override;
 
     function Login: Boolean;
-    function GetBugCount(var UnclosedBugCount, UnresolvedBugCount: Integer): Boolean;
+    function GetBugDetail(var UnclosedBugCount, UnresolvedBugCount: Integer): Boolean;
     function Logout: Boolean;
 
   public
     constructor Create;
     destructor Destroy; override;
 
-    property Ver: string read FVer write FVer;
-    property BugFreeUrl: string read FBugFreeUrl write FBugFreeUrl;
-    property UserName: string read FUserName write FUserName;
-    property UserPWD: string read FUserPWD write FUserPWD;
-    property UpdateIntervalSec: Integer read GetUpdateIntervalSec write SetUpdateIntervalSec;
+    procedure OpenIE(const Url: string);
+
+    property Ver: string read FVer;
 
     property IsLogin: Boolean read FIsLogin;
     property LastUpdateTime: TDateTime read FLastUpdateTime;
     property UnclosedBugCount: Integer read FUnclosedBugCount;  // 未关闭bug
     property UnresolvedBugCount: Integer read FUnresolvedBugCount; // 未解决bug
     property Statue: TMonitorBugStatue read FMonitorBugStatue;
+
+    property UnclosedBugList: TParamList read FUnclosedBugList;
+    property UnresolvedBugList: TParamList read FUnresolvedBugList;
 
     property BugChangeNotify: TBugCountChangeNotify read FBugChangeNotify write FBugChangeNotify;
     property BugStatueChangeNotify: TBugStatueChangeNotify read FBugStatueChangeNotify write FBugStatueChangeNotify;
@@ -77,6 +78,9 @@ begin
   FVer := 'For BugFree2.0(RTM)';
   Http := TStupidHttp.Create(FVer);
 
+  FUnclosedBugList := TParamList.Create;
+  FUnresolvedBugList := TParamList.Create;
+
   // Bug更新时间
   SleepTime := 10 * 1000;
   FIsLogin := False;
@@ -91,6 +95,8 @@ end;
 
 destructor TMonitorBug.Destroy;
 begin
+  FreeAndNil(FUnclosedBugList);
+  FreeAndNil(FUnresolvedBugList);
   FreeAndNil(Http);
   inherited;
 end;
@@ -105,16 +111,16 @@ var
 begin
   Result := False;
 
-  if BugFreeUrl = '' then Exit;
-  if UserName = '' then Exit;
-  if UserPWD = '' then Exit;
+  if Config.BugFreeUrl = '' then Exit;
+  if Config.UserName = '' then Exit;
+  if Config.UserPWD = '' then Exit;
 
   Params := TParamList.Create;
   try
     Params.SetParam('${post}', 'xajax=xCheckUserLogin&xajaxr=1213254554968&xajaxargs[]=%3Cxjxquery%3E%3Cq%3ETestUserName%3D${username}%26TestUserPWD%3D${password}%26Language%3DZH_CN_UTF-8%26HttpRefer%3D%3C%2Fq%3E%3C%2Fxjxquery%3E');
-    Params.SetParam('${username}', UserName);
-    Params.SetParam('${password}', UserPWD);
-    Html := Http.Post(BugFreeUrl + '/Login.php', Params);
+    Params.SetParam('${username}', Config.UserName);
+    Params.SetParam('${password}', Config.UserPWD);
+    Html := Http.Post(Config.BugFreeUrl + '/Login.php', Params);
     
     StartIndex := Pos(SuccessFlag, Html);
     if StartIndex <= 0 then Exit;
@@ -124,7 +130,7 @@ begin
   Result := True;
 end;
 
-function TMonitorBug.GetBugCount(var UnclosedBugCount, UnresolvedBugCount: Integer): Boolean;
+function TMonitorBug.GetBugDetail(var UnclosedBugCount, UnresolvedBugCount: Integer): Boolean;
 const
   UnclosedBugCountParam = 'AutoComplete=on&AndOr0=And&Field0=ProjectName&Operator0=%3D&' +
   'Value0=&AndOrGroup=AND&AndOr1=And&Field1=OpenedBy&Operator1=%3D&Value1=&' +
@@ -140,51 +146,111 @@ const
   'Field4=BugID&Operator4=%3D&Value4=&AndOr5=And&Field5=BugTitle&' +
   'Operator5=LIKE&Value5=&PostQuery=%E6%8F%90%E4%BA%A4%E6%9F%A5%E8%AF%A2%E5%86%85%E5%AE%B9&QueryType=Bug';
 
-  function GetBugCount(PostParam: string; var BugCount: Integer): Boolean;
+var
+  Html: string;
+
+  function GetPost(PostParam: string): string;
   var
     Param: TParamList;
-    Html: string;
-    StartIndex: Integer;
-    RecordStr: string;
   begin
-    Result := False;
     Param := TParamList.Create;
     try
       Param.SetParam('${post}', PostParam);
-      Param.SetParam('${username}', UserName);
-      Html := Http.Post(BugFreeUrl + '/BugList.php', Param);
-      TParamList.FindSubStr(Html, '<td style="text-align:left;border:0;width:30%">'#13#10, #13#10, Html);
-      StartIndex := Pos('/', Html);
-      if StartIndex <= 0 then Exit;
-      StartIndex := StartIndex + 1;
-      RecordStr := MidStr(Html, StartIndex, MaxInt);
-      BugCount := StrToIntDef(RecordStr, 0);
-      Result := True;
+      Param.SetParam('${username}', Config.UserName);
+      Result := Http.Post(Config.BugFreeUrl + '/BugList.php', Param);
     finally
       FreeAndNil(Param);
     end;
   end;
-  
+
 begin
-  if GetBugCount(UnclosedBugCountParam, UnclosedBugCount) and
-    GetBugCount(UnresolvedBugParam, UnresolvedBugCount) then
-    Result := True
-  else
-    Result := False;
+  Result := False;
+
+  Html := GetPost(UnclosedBugCountParam);
+  if not GetBugCount(Html, UnclosedBugCount) then Exit;
+  GetBugList(Html, FUnclosedBugList);
+
+  Html := GetPost(UnresolvedBugParam);
+  if not GetBugCount(Html, UnresolvedBugCount) then Exit;
+  GetBugList(Html, FUnresolvedBugList);
+
+  Result := True;
+end;
+
+function TMonitorBug.GetBugCount(Html: string; var BugCount: Integer): Boolean;
+var
+  StartIndex: Integer;
+  RecordStr: string;
+begin
+  Result := False;
+  TParamList.FindSubStr(Html, '<td style="text-align:left;border:0;width:30%">'#13#10, #13#10, Html);
+  StartIndex := Pos('/', Html);
+  if StartIndex <= 0 then Exit;
+  StartIndex := StartIndex + 1;
+  RecordStr := MidStr(Html, StartIndex, MaxInt);
+  BugCount := StrToIntDef(RecordStr, 0);
+  Result := True;
+end;
+
+function TMonitorBug.GetBugList(Html: string; var List: TParamList): Boolean;
+const
+  NumFirstFlag = '<td align="center">' + #13#10 + '                  <nobr>';
+  NumLastFlag = '</nobr>';
+  PriFirstFlag = '<nobr>';
+  PriLastFlag = '</nobr>';
+  UrlFirstFlag = '<a href="';
+  UrlLastFlag = '" title="';
+  TitleFirstFlag = 'target="_blank"><nobr>';
+  TitleLastFlag = '</nobr></a>';
+var
+  B, E: Integer;
+  Url: string;
+  Title: string;
+begin
+  Result := False;
+  List.Clear;
+  E := 0;
+  while E < Length(Html) do
+  begin
+    B := PosEx(NumFirstFlag, Html, E + 1);
+    if B = 0 then Break;
+    B := B + Length(NumFirstFlag);
+    E := PosEx(NumLastFlag, Html, B);
+    Title := '[' + MidStr(Html, B, E - B) + ']';
+
+    B := PosEx(PriFirstFlag, Html, E + 1) + Length(PriFirstFlag);
+    E := PosEx(PriLastFlag, Html, B);
+    Title := Title + '(' + MidStr(Html, B, E - B) + ')';
+    
+    B := PosEx(UrlFirstFlag, Html, E + 1) + Length(UrlFirstFlag);
+    E := PosEx(UrlLastFlag, Html, B);
+    Url := Config.BugFreeUrl + '/' + MidStr(Html, B, E - B);
+    B := PosEx(TitleFirstFlag, Html, E + 1) + Length(TitleFirstFlag);
+    E := PosEx(TitleLastFlag, Html, B);
+    Title := Title + MidStr(Html, B, E - B);
+    Title := Utf8ToAnsiString(Title, CP_ACP);
+    List.SetParam(Title, Url);
+  end;
+  Result := True;
 end;
 
 function TMonitorBug.Logout: Boolean;
 begin
   Result := False;
 
-  if BugFreeUrl = '' then Exit;
+  if Config.BugFreeUrl = '' then Exit;
 
   try
-    Http.Get(BugFreeUrl + '/Logout.php?Logout=Yes');
+    //todo Http.Get(Config.BugFreeUrl + '/Logout.php?Logout=Yes');
     Result := True;
   except
     // nothing
   end;
+end;
+
+procedure TMonitorBug.OpenIE(const Url: string);
+begin
+  ShellExecute(0, 'open', PChar(Url), nil, nil, SW_SHOW);
 end;
 
 procedure TMonitorBug.Process;
@@ -199,7 +265,7 @@ begin
     end;
     mbsLogining:
     begin
-      if (BugFreeUrl = '') or (UserName = '') or (UserPWD = '') then
+      if (Config.BugFreeUrl = '') or (Config.UserName = '') or (Config.UserPWD = '') then
       begin
         SetStatue(mbsParamFail);
         Exit;
@@ -219,7 +285,7 @@ begin
     mbsNormal:
     begin
       try
-        if GetBugCount(UnclosedBugCount, UnresolvedBugCount) then
+        if GetBugDetail(UnclosedBugCount, UnresolvedBugCount) then
         begin
           try
             if ((FUnclosedBugCount <> UnclosedBugCount) or (FUnresolvedBugCount <> UnresolvedBugCount)) then
@@ -271,6 +337,7 @@ begin
       end;
       mbsNormal:
       begin
+        Http.SetIESessionCookie; // 设置IECookies，使得登录状态可以保持
         FIsLogin := True;
       end;
       mbsParamFail:
@@ -300,20 +367,8 @@ end;
 
 procedure TMonitorBug.AfterRun;
 begin
-//  Logout;
-end;
-
-function TMonitorBug.GetUpdateIntervalSec: Integer;
-begin
-  Result := SleepTime div 1000;
-end;
-
-procedure TMonitorBug.SetUpdateIntervalSec(const Value: Integer);
-begin
-  if SleepTime <> Value then
-  begin
-    SleepTime := Value * 1000;
-  end;
+  Logout;
+  Http.ClearIESessionCookie;
 end;
 
 end.

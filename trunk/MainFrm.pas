@@ -4,8 +4,7 @@ interface
 
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
-  Dialogs, StdCtrls, IdBaseComponent, IdComponent, IdTCPConnection, IdTCPClient,
-  IdHTTP, ExtCtrls, MonitorBug, Menus, ImgList, ShellAPI;
+  Dialogs, StdCtrls, ExtCtrls, MonitorBug, Menus, ImgList;
 
 type
   TBugFreeHelperForm = class(TForm)
@@ -31,10 +30,11 @@ type
       OldUnclosedBugCount, NewUnclosedBugCount: Integer;
       OldUnresolvedBugCount, NewUnresolvedBugCount: Integer);
     procedure BugStatueChange(Sender: TObject; OldStatue, NewStatue: TMonitorBugStatue);
+    procedure OpenMenuItemUrl(Sender: TObject);
   public
     { Public declarations }
     procedure MainClose(Sender: TObject);
-    procedure OpenBrowser(Sender: TObject);
+    procedure OpenIndexPage(Sender: TObject);
     procedure OpenSetting(Sender: TObject);
     procedure ShowAboutForm(Sender: TObject);
   end;
@@ -112,10 +112,6 @@ begin
   if FMonitorBug <> nil then DestroyMonitor;
 
   FMonitorBug := TMonitorBug.Create;
-  FMonitorBug.BugFreeUrl := Config.BugFreeUrl;
-  FMonitorBug.UserName := Config.UserName;
-  FMonitorBug.UserPWD := Config.UserPWD;
-  FMonitorBug.UpdateIntervalSec := Config.UpdateIntervalSec;
   FMonitorBug.BugChangeNotify := BugCountChange;
   FMonitorBug.BugStatueChangeNotify := BugStatueChange;
     
@@ -150,13 +146,20 @@ begin
   Close;
 end;
 
-procedure TBugFreeHelperForm.OpenBrowser(Sender: TObject);
-var
-  Url: string;
+procedure TBugFreeHelperForm.OpenIndexPage(Sender: TObject);
 begin
-  Url := Format('%s\index.php?BugUserName=%s&BugUserPWD=%s',
-                [Config.BugFreeUrl, Config.UserName, Config.UserPWD]);
-  ShellExecute(0, 'open', PChar(Url), nil, nil, SW_SHOW);
+  FMonitorBug.OpenIE(Config.BugFreeUrl + '/' + 'index.php');
+end;
+
+procedure TBugFreeHelperForm.OpenMenuItemUrl(Sender: TObject);
+var
+  MI: TMenuItem;
+begin
+  if Sender is TMenuItem then
+  begin
+    MI := TMenuItem(Sender);
+    FMonitorBug.OpenIE(MI.Hint);
+  end;
 end;
 
 procedure TBugFreeHelperForm.OpenSetting(Sender: TObject);
@@ -238,11 +241,48 @@ procedure TBugFreeHelperForm.MainPopupMenuPopup(Sender: TObject);
 var
   Ver: Cardinal;
 
-  function CreateMenuItem(Caption: string; Event: TNotifyEvent): TMenuItem;
+  function CreateMenuItem(Caption: string; Event: TNotifyEvent;
+    Tag: Integer = 0; Hint: string = ''): TMenuItem;
   begin
     Result := TMenuItem.Create(nil);
     Result.Caption := Caption;
     Result.OnClick := Event;
+    Result.Tag := Tag;
+    Result.Hint := Hint;
+  end;
+
+  procedure AddMenuItem;
+  var
+    I: Integer;
+    Key, Value: string;
+    mi: TMenuItem;
+  begin
+    if FMonitorBug.UnclosedBugCount = 0 then
+      MainPopupMenu.Items.Add(CreateMenuItem(Format('恭喜你[%s]，没有你的Bug', [Config.UserName]), OpenIndexPage))
+    else begin
+      MainPopupMenu.Items.Add(CreateMenuItem(Format('BugFree首页...', []), OpenIndexPage));
+      MainPopupMenu.Items.Add(CreateMenuItem(Format('-', []), nil));
+
+      MainPopupMenu.Items.Add(CreateMenuItem(Format('[%s]未关闭Bug%d个...', [Config.UserName, FMonitorBug.UnclosedBugCount]), nil));
+      mi := MainPopupMenu.Items[MainPopupMenu.Items.Count - 1];
+      mi.Add(CreateMenuItem(Format('>>>>>>最多前20项<<<<<<', []), nil));
+      for I := 0 to FMonitorBug.UnclosedBugList.Count - 1 do
+      begin
+        FMonitorBug.UnclosedBugList.GetParam(I, Key, Value);
+        mi.Add(CreateMenuItem(Key, OpenMenuItemUrl, I, Value));
+      end;
+
+      MainPopupMenu.Items.Add(CreateMenuItem(Format('[%s]未解决Bug%d个...', [Config.UserName, FMonitorBug.UnresolvedBugCount]), nil));
+      mi := MainPopupMenu.Items[MainPopupMenu.Items.Count - 1];
+      mi.Add(CreateMenuItem(Format('>>>>>>最多前20项<<<<<<', []), nil));
+      for I := 0 to FMonitorBug.UnresolvedBugList.Count - 1 do
+      begin
+        FMonitorBug.UnresolvedBugList.GetParam(I, Key, Value);
+        mi.Add(CreateMenuItem(Key, OpenMenuItemUrl, I, Value));
+      end;
+
+    end;
+
   end;
 
 begin
@@ -265,12 +305,7 @@ begin
       end;
       mbsNormal:
       begin
-        if FMonitorBug.UnclosedBugCount = 0 then
-          MainPopupMenu.Items.Add(CreateMenuItem(Format('恭喜你[%s]，没有你的Bug', [FMonitorBug.UserName]), OpenBrowser))
-        else begin
-          MainPopupMenu.Items.Add(CreateMenuItem(Format('[%s]未关闭Bug%d个...', [FMonitorBug.UserName, FMonitorBug.UnclosedBugCount]), OpenBrowser));
-          MainPopupMenu.Items.Add(CreateMenuItem(Format('[%s]未解决Bug%d个...', [FMonitorBug.UserName, FMonitorBug.UnresolvedBugCount]), OpenBrowser));
-        end;
+        AddMenuItem;
       end;
       mbsParamFail:
       begin
@@ -278,7 +313,7 @@ begin
       end;
       mbsLoginFail:
       begin
-        MainPopupMenu.Items.Add(CreateMenuItem(Format('[%s]密码设错误，赶紧重新设置...', [FMonitorBug.UserName]), OpenSetting))
+        MainPopupMenu.Items.Add(CreateMenuItem(Format('[%s]密码设错误，赶紧重新设置...', [Config.UserName]), OpenSetting))
       end;
       mbsHttpFail:
       begin

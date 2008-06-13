@@ -11,7 +11,8 @@ uses
   AboutFrm in 'AboutFrm.pas' {AboutForm},
   ParamUnit in 'ParamUnit.pas',
   StupidHttp in 'StupidHttp.pas',
-  WorkerThreadUnit in 'WorkerThreadUnit.pas';
+  WorkerThreadUnit in 'WorkerThreadUnit.pas',
+  EncodeUnit in 'EncodeUnit.pas';
 
 {$R *.res}
 

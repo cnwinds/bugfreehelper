@@ -90,7 +90,6 @@ object SettingForm: TSettingForm
     Default = True
     TabOrder = 3
     OnClick = Button1Click
-    ExplicitTop = 174
   end
   object Button2: TButton
     Left = 216
@@ -101,7 +100,6 @@ object SettingForm: TSettingForm
     Caption = #20851#38381
     TabOrder = 4
     OnClick = Button2Click
-    ExplicitTop = 174
   end
   object SpinEdit1: TSpinEdit
     Left = 106
