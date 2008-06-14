@@ -28,7 +28,8 @@ begin
       begin   // 2-byte
         inc(I);
         c1 := Byte(Utf8Str[I]);
-        WBuffer[length(WBuffer)]:=WideChar((Word(ch and $1f) shl 6) or (c1 and $3f));
+        WBuffer[length(WBuffer)] :=
+          WideChar((Word(ch and $1f) shl 6) or (c1 and $3f));
       end
       else begin   // 3-byte
         Inc(I);

@@ -213,6 +213,7 @@ begin
     Result := DoGet(Params);
   finally
     FreeAndNil(Params);
+    FreeAndNil(Uri);
   end;
 end;
 
@@ -221,11 +222,15 @@ var
   Uri: TIdURI;
 begin
   Uri := TIdURI.Create(Url);
-  Params.SetParam(ParamUrl, Url);
-  Params.SetParam(ParamHost, Uri.Host);
-  Params.SetParam(ParamPath, Uri.Path + Uri.Document);
-  Params.SetParam(ParamPort, Uri.Port);
-  Result := DoPost(Params);
+  try
+    Params.SetParam(ParamUrl, Url);
+    Params.SetParam(ParamHost, Uri.Host);
+    Params.SetParam(ParamPath, Uri.Path + Uri.Document);
+    Params.SetParam(ParamPort, Uri.Port);
+    Result := DoPost(Params);
+  finally
+    FreeAndNil(Uri);
+  end;
 end;
 
 end.
