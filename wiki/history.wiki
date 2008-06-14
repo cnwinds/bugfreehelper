@@ -1,7 +1,7 @@
 #labels Featured
 #BugFreeHelper release history
 
-= 2.2 2008-6-13 =
+= 2.2 2008-6-14 =
 {{{
  * 修正了cookie会不停增长的问题
  + 能显示详细Bug信息，并且点击Bug后能直接打开对应的页面
