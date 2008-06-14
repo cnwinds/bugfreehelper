@@ -12,7 +12,7 @@ uses
   ParamUnit in 'ParamUnit.pas',
   StupidHttp in 'StupidHttp.pas',
   WorkerThreadUnit in 'WorkerThreadUnit.pas',
-  EncodeUnit in 'EncodeUnit.pas';
+  ConvertCharset in 'ConvertCharset.pas';
 
 {$R *.res}
 
