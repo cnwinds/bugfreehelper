@@ -9,10 +9,9 @@ type
 
   TStupidHttp = class(TObject)
   private
-    FTCPClient: TIdTCPClient;
     FGlobalParams: TParamList;
     FCookies: TParamList;
-    procedure ReadHttpResponse(var Header, Body: TStrings);
+    procedure ReadHttpResponse(TcpClient: TIdTCPClient; var Header, Body: TStrings);
 
   protected
     function DoGet(const Params: TParamList): string;
@@ -28,6 +27,7 @@ type
 
     procedure SetIESessionCookie;
     procedure ClearIESessionCookie;
+    procedure SetIECookie(const Url, Cookie: string);
   end;
 implementation
 
@@ -45,7 +45,6 @@ constructor TStupidHttp.Create(const Version: string);
 begin
   FGlobalParams := TParamList.Create;
   FCookies := TParamList.Create;
-  FTCPClient := TIdTCPClient.Create(nil);
 
   FGlobalParams.SetParam(ParamVersion, Version);
   FGlobalParams.SetParam(ParamCookies, '');
@@ -53,12 +52,11 @@ end;
 
 destructor TStupidHttp.Destroy;
 begin
-  FreeAndNil(FTCPClient);
   FreeAndNil(FCookies);
   FreeAndNil(FGlobalParams);
 end;
 
-procedure TStupidHttp.ReadHttpResponse(var Header, Body: TStrings);
+procedure TStupidHttp.ReadHttpResponse(TcpClient: TIdTCPClient; var Header, Body: TStrings);
 var
   Line: string;
   Cookie: string;
@@ -67,7 +65,7 @@ begin
   Header.Clear;
   while True do
   begin
-    Line := FTCPClient.IOHandler.ReadLn();
+    Line := TcpClient.IOHandler.ReadLn();
     if Line = '' then Break;
     Header.Add(Line);
     if TParamList.FindSubStr(Line, 'Set-Cookie: ', ' path=/', Cookie) then
@@ -78,7 +76,12 @@ begin
   end;
   // read body
   Body.Clear;
-  Body.Text := FTCPClient.IOHandler.AllData;
+  Body.Text := TcpClient.IOHandler.AllData;
+end;
+
+procedure TStupidHttp.SetIECookie(const Url, Cookie: string);
+begin
+  InternetSetCookie(PChar(Url), nil, PChar(Cookie));
 end;
 
 procedure TStupidHttp.SetIESessionCookie;
@@ -87,7 +90,7 @@ var
 begin
   FCookies.GetParam('PHPSESSID', Cookie);
   Cookie := 'PHPSESSID=' + Cookie + '; expires=Sun, 22-Feb-2099 08:08:08 GMT';
-  InternetSetCookie(PChar(Config.BugFreeUrl + '/'), nil, PChar(Cookie));
+  SetIECookie(Config.BugFreeUrl + '/', Cookie);
 end;
 
 procedure TStupidHttp.ClearIESessionCookie;
@@ -95,7 +98,7 @@ var
   Cookie: string;
 begin
   Cookie := 'PHPSESSID=0; expires=Sun, 22-Feb-2099 08:08:08 GMT';
-  InternetSetCookie(PChar(Config.BugFreeUrl + '/'), nil, PChar(Cookie));
+  SetIECookie(Config.BugFreeUrl + '/', Cookie);
 end;
 
 function TStupidHttp.DoGet(const Params: TParamList): string;
@@ -114,6 +117,7 @@ var
   Port: string;
   Request: string;
   Header, Body: TStrings;
+  TcpClient: TIdTCPClient;
 begin
   if not Params.GetParam(ParamHost, Host) then raise Exception.Create('没有提供host参数！');
   if not Params.GetParam(ParamPort, Port) then Port := '80';
@@ -123,18 +127,20 @@ begin
   Request := FGlobalParams.ReplaceAllParam(Request);
   Request := Params.ReplaceAllParam(Request);
 
-  FTCPClient.Connect(Host, StrToInt(Port));
+  TcpClient := TIdTCPClient.Create(nil);
   Header := TStringList.Create;
   Body := TStringList.Create;
   try
-    FTCPClient.IOHandler.WriteLn(Request);
-    FTCPClient.IOHandler.WriteBufferFlush;
-    ReadHttpResponse(Header, Body);
+    TcpClient.Connect(Host, StrToInt(Port));
+    TcpClient.IOHandler.WriteLn(Request);
+    TcpClient.IOHandler.WriteBufferFlush;
+    ReadHttpResponse(TcpClient, Header, Body);
     Result := Body.Text;
   finally
     FreeAndNil(Header);
     FreeAndNil(Body);
-    FTCPClient.Disconnect;
+    TcpClient.Disconnect;
+    FreeAndNil(TcpClient);
   end;
 end;
 
@@ -161,6 +167,7 @@ var
   Request: string;
   I, PostLen: Integer;
   Header, Body: TStrings;
+  TcpClient: TIdTCPClient;
 begin
   if not Param.GetParam(ParamHost, Host) then raise Exception.Create('没有提供host参数！');
   if not Param.GetParam(ParamPort, Port) then Port := '80';
@@ -175,18 +182,20 @@ begin
     Param.SetParam('${post_length}', IntToStr(PostLen));
   Request := Param.ReplaceAllParam(Request);
 
-  FTCPClient.Connect(Host, StrToInt(Port));
+  TcpClient := TIdTCPClient.Create(nil);
   Header := TStringList.Create;
   Body := TStringList.Create;
   try
-    FTCPClient.IOHandler.Write(Request);
-    FTCPClient.IOHandler.WriteBufferFlush;
-    ReadHttpResponse(Header, Body);
+    TcpClient.Connect(Host, StrToInt(Port));
+    TcpClient.IOHandler.Write(Request);
+    TcpClient.IOHandler.WriteBufferFlush;
+    ReadHttpResponse(TcpClient, Header, Body);
     Result := Body.Text;
   finally
     FreeAndNil(Header);
     FreeAndNil(Body);
-    FTCPClient.Disconnect;
+    TcpClient.Disconnect;
+    FreeAndNil(TcpClient);
   end;
 end;
 
