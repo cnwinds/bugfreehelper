@@ -3,12 +3,12 @@ unit MonitorBug;
 interface
 
 uses Forms, WorkerThreadUnit, StupidHttp, ParamUnit, SysUtils, StrUtils,
-  Classes, ConfigUnit, ConvertCharset, IdURI;
+  Classes, ConfigUnit, ConvertCharset;
 
 type
 
   TMonitorBug = class;
-  TBugPatter = class;
+  TPatternBug = class;
 
   TMonitorBugStatue = ( mbsOffline,     // 离线
                         mbsLogining,    // 正在登陆
@@ -18,17 +18,18 @@ type
                         mbsHttpFail);   // 访问服务器失败
 
   TBugCountChangeNotify = procedure(Sender: TObject;
-    BugPatter: TBugPatter; OldBugCount, NewBugCount: Integer) of object;
+    PatternBug: TPatternBug; OldBugCount, NewBugCount: Integer) of object;
 
-  TBugStatueChangeNotify = procedure(Sender: TObject; OldStatue, NewStatue: TMonitorBugStatue) of object;
+  TBugStatueChangeNotify = procedure(Sender: TObject;
+    OldStatue, NewStatue: TMonitorBugStatue) of object;
 
   { TBugUpdateState - Bug数更新的状态 }
   
   TBugUpdateState = (busNotUpdate, busUpdateFail, busUpdateSuccess);
 
-  { TBugPatter - 每种Bug数获取的方式 }
+  { TPatternBug - 每种Bug数获取的方式 }
   
-  TBugPatter = class(TObject)
+  TPatternBug = class(TObject)
   public
     function GetUpdateState: TBugUpdateState; virtual; abstract;
     function GetBugCount: Integer; virtual; abstract;
@@ -38,26 +39,26 @@ type
     function UpdateBugInfo: Boolean; virtual; abstract;
   end;
 
-  { TBugPatterList }
+  { TPatternBugList }
   
-  TBugPatterList = class(TObject)
+  TPatternBugList = class(TObject)
   private
     FList: TList;
 
-    function GetItems(I: Integer): TBugPatter;
+    function GetItems(I: Integer): TPatternBug;
   public
     constructor Create;
     destructor Destroy; override;
     
-    procedure Add(BP: TBugPatter);
+    procedure Add(PatternBug: TPatternBug);
     procedure Clear;
     function GetCount: Integer;
 
-    property Items[I: Integer]: TBugPatter read GetItems; default;
+    property Items[I: Integer]: TPatternBug read GetItems; default;
     property Count: Integer read GetCount;
   end;
 
-  TUnclosedBugPatter = class(TBugPatter)
+  TUnclosedBug = class(TPatternBug)
   private
     FMB: TMonitorBug;
     FCount: Integer;
@@ -93,9 +94,9 @@ type
     Http: TStupidHttp;
     FBugChangeNotify: TBugCountChangeNotify;
     FBugStatueChangeNotify: TBugStatueChangeNotify;
-    FVer: string;
+    FVersion: string;
 
-    FBugPatterList: TBugPatterList;
+    FPatternBugList: TPatternBugList;
 
     procedure SetStatue(Value: TMonitorBugStatue);
 
@@ -114,15 +115,17 @@ type
 
     function GetIndexPageUrl: string;
 
-    property Ver: string read FVer;
+    property Version: string read FVersion;
 
     property IsLogin: Boolean read FIsLogin;
     property LastUpdateTime: TDateTime read FLastUpdateTime;
     property Statue: TMonitorBugStatue read FMonitorBugStatue;
-    property BugPatterList: TBugPatterList read FBugPatterList;
+    property PatternBugList: TPatternBugList read FPatternBugList;
 
-    property BugChangeNotify: TBugCountChangeNotify read FBugChangeNotify write FBugChangeNotify;
-    property BugStatueChangeNotify: TBugStatueChangeNotify read FBugStatueChangeNotify write FBugStatueChangeNotify;
+    property BugChangeNotify: TBugCountChangeNotify
+      read FBugChangeNotify write FBugChangeNotify;
+    property BugStatueChangeNotify: TBugStatueChangeNotify
+      read FBugStatueChangeNotify write FBugStatueChangeNotify;
   end;
 
 implementation
@@ -132,12 +135,12 @@ implementation
 constructor TMonitorBug.Create;
 begin
   inherited;
-  FVer := 'For BugFree2.0(RTM)';
-  Http := TStupidHttp.Create(FVer);
+  FVersion := 'For BugFree2.0(RTM)';
+  Http := TStupidHttp.Create(FVersion);
 
-  FBugPatterList := TBugPatterList.Create;
+  FPatternBugList := TPatternBugList.Create;
 
-  FBugPatterList.Add(TUnclosedBugPatter.Create(Self)); // 加入需要显示的Bug
+  FPatternBugList.Add(TUnclosedBug.Create(Self)); // 加入需要显示的Bug
 
   // Bug更新时间
   SleepTime := 10 * 1000;
@@ -154,7 +157,7 @@ end;
 destructor TMonitorBug.Destroy;
 begin
   FreeAndNil(Http);
-  FreeAndNil(FBugPatterList);
+  FreeAndNil(FPatternBugList);
   inherited;
 end;
 
@@ -211,12 +214,12 @@ end;
 function TMonitorBug.UpdateBugInfo: Boolean;
 var
   I: Integer;
-  Bug: TBugPatter;
+  Bug: TPatternBug;
   OldCount: Integer;
 begin
-  for I := 0 to FBugPatterList.Count - 1 do
+  for I := 0 to FPatternBugList.Count - 1 do
   begin
-    Bug := FBugPatterList[I];
+    Bug := FPatternBugList[I];
     OldCount := Bug.GetBugCount;
     if Bug.UpdateBugInfo then
     begin
@@ -357,42 +360,42 @@ begin
   Http.ClearIESessionCookie;
 end;
 
-{ TUnclosedBugPatter }
+{ TUnclosedBug }
 
-constructor TUnclosedBugPatter.Create(MB: TMonitorBug);
+constructor TUnclosedBug.Create(MB: TMonitorBug);
 begin
   FMB := MB;
   FBugList := TParamList.Create;
   FBugUpdateState := busNotUpdate;
 end;
 
-destructor TUnclosedBugPatter.Destroy;
+destructor TUnclosedBug.Destroy;
 begin
   FreeAndNil(FBugList);
   inherited;
 end;
 
-function TUnclosedBugPatter.GetBugCount: Integer;
+function TUnclosedBug.GetBugCount: Integer;
 begin
   Result := FCount;
 end;
 
-function TUnclosedBugPatter.GetBugDesc: string;
+function TUnclosedBug.GetBugDesc: string;
 begin
   Result := '未关闭Bug';
 end;
 
-function TUnclosedBugPatter.GetBugList: TParamList;
+function TUnclosedBug.GetBugList: TParamList;
 begin
   Result := FBugList;
 end;
 
-function TUnclosedBugPatter.GetUpdateState: TBugUpdateState;
+function TUnclosedBug.GetUpdateState: TBugUpdateState;
 begin
   Result := FBugUpdateState;
 end;
 
-function TUnclosedBugPatter.UpdateBugInfo: Boolean;
+function TUnclosedBug.UpdateBugInfo: Boolean;
 const
   UnclosedBugCountParam = 'AutoComplete=on&AndOr0=And&Field0=ProjectName&Operator0=%3D&' +
   'Value0=&AndOrGroup=AND&AndOr1=And&Field1=OpenedBy&Operator1=%3D&Value1=&' +
@@ -433,7 +436,7 @@ begin
   end;
 end;
 
-function TUnclosedBugPatter.UpdateBugCount(Html: string; var BugCount: Integer): Boolean;
+function TUnclosedBug.UpdateBugCount(Html: string; var BugCount: Integer): Boolean;
 var
   StartIndex: Integer;
   RecordStr: string;
@@ -448,7 +451,7 @@ begin
   Result := True;
 end;
 
-function TUnclosedBugPatter.UpdateBugList(Html: string; var List: TParamList): Boolean;
+function TUnclosedBug.UpdateBugList(Html: string; var List: TParamList): Boolean;
 const
   NumFirstFlag = '<td align="center">' + #13#10 + '                  <nobr>';
   NumLastFlag = '</nobr>';
@@ -491,42 +494,42 @@ begin
   Result := True;
 end;
 
-{ TBugPatterList }
+{ TPatternBugList }
 
-constructor TBugPatterList.Create;
+constructor TPatternBugList.Create;
 begin
   FList := TList.Create;
 end;
 
-destructor TBugPatterList.Destroy;
+destructor TPatternBugList.Destroy;
 begin
   Clear;
   FreeAndNil(FList);
   inherited;
 end;
 
-procedure TBugPatterList.Add(BP: TBugPatter);
+procedure TPatternBugList.Add(PatternBug: TPatternBug);
 begin
-  FList.Add(BP);
+  FList.Add(PatternBug);
 end;
 
-procedure TBugPatterList.Clear;
+procedure TPatternBugList.Clear;
 var
   I: Integer;
 begin
   for I := 0 to FList.Count - 1 do
-    TBugPatter(FList[I]).Free;
+    TPatternBug(FList[I]).Free;
   FList.Clear;
 end;
 
-function TBugPatterList.GetCount: Integer;
+function TPatternBugList.GetCount: Integer;
 begin
   Result := FList.Count;
 end;
 
-function TBugPatterList.GetItems(I: Integer): TBugPatter;
+function TPatternBugList.GetItems(I: Integer): TPatternBug;
 begin
-  Result := TBugPatter(FList[I]);
+  Result := TPatternBug(FList[I]);
 end;
 
 end.

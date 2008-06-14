@@ -27,7 +27,7 @@ type
     procedure DestroyMonitor;
 
     procedure BugCountChange(Sender: TObject;
-      BugPatter: TBugPatter; OldBugCount, NewBugCount: Integer);
+      PatternBug: TPatternBug; OldBugCount, NewBugCount: Integer);
     procedure BugStatueChange(Sender: TObject; OldStatue, NewStatue: TMonitorBugStatue);
     procedure OpenMenuItemUrl(Sender: TObject);
     procedure OpenIndexPage(Sender: TObject);
@@ -49,19 +49,19 @@ uses SettingFrm, ConfigUnit, AboutFrm;
 {$R *.dfm}
 
 procedure TBugFreeHelperForm.BugCountChange(Sender: TObject;
-    BugPatter: TBugPatter; OldBugCount, NewBugCount: Integer);
+    PatternBug: TPatternBug; OldBugCount, NewBugCount: Integer);
 begin
   MainTrayIcon.BalloonTitle := '';
 
   if NewBugCount = 0 then
-    MainTrayIcon.BalloonHint := Format('太好了，你已经清除了所有的 :)',
-      [BugPatter.GetBugDesc])
+    MainTrayIcon.BalloonHint := Format('太好了，你已经清除了所有的%s :)',
+      [PatternBug.GetBugDesc])
   else if OldBugCount < NewBugCount then
     MainTrayIcon.BalloonHint := Format('注意：新发现了%d个%s，现在你共有%d个%s。',
-      [NewBugCount - OldBugCount, BugPatter.GetBugDesc, NewBugCount, BugPatter.GetBugDesc])
+      [NewBugCount - OldBugCount, PatternBug.GetBugDesc, NewBugCount, PatternBug.GetBugDesc])
   else
     MainTrayIcon.BalloonHint := Format('恭喜了，减少了%d个%s，现在你共有%d个%s。',
-      [OldBugCount - NewBugCount, BugPatter.GetBugDesc, NewBugCount, BugPatter.GetBugDesc]);
+      [OldBugCount - NewBugCount, PatternBug.GetBugDesc, NewBugCount, PatternBug.GetBugDesc]);
   MainTrayIcon.BalloonTimeout := 5000;
   MainTrayIcon.BalloonFlags := bfInfo;
   MainTrayIcon.ShowBalloonHint;
@@ -210,7 +210,7 @@ begin
     end;
     mbsNormal:
     begin
-      if FMonitorBug.BugPatterList.Items[0].GetBugCount = 0 then  // 判断第一项Bug数是否为0
+      if FMonitorBug.PatternBugList.Items[0].GetBugCount = 0 then  // 判断第一项Bug数是否为0
       begin
         MainTrayIcon.Icons := ImageList1;
         MainTrayIcon.Animate := False;
@@ -261,15 +261,15 @@ var
     I, J: Integer;
     Key, Value: string;
     MenuItem: TMenuItem;
-    Bug: TBugPatter;
+    Bug: TPatternBug;
   begin
     MainPopupMenu.Items.Add(CreateMenuItem(Format('BugFree首页...',
       []), OpenIndexPage));
     MainPopupMenu.Items.Add(CreateMenuItem(Format('-', []), nil));
 
-    for I := 0 to FMonitorBug.BugPatterList.Count - 1 do
+    for I := 0 to FMonitorBug.PatternBugList.Count - 1 do
     begin
-      Bug := FMonitorBug.BugPatterList[I];
+      Bug := FMonitorBug.PatternBugList[I];
       if Bug.GetBugCount = 0 then
         MainPopupMenu.Items.Add(
           CreateMenuItem(Format('恭喜你[%s]，没有%s',
@@ -292,7 +292,7 @@ begin
 
   Ver := GetFileVersion(Application.ExeName);
   MainPopupMenu.Items.Add(CreateMenuItem(Format('版本[%d.%d] %s...',
-    [Ver shr 16, Ver and $ffff, FMonitorBug.Ver]), ShowAboutForm));
+    [Ver shr 16, Ver and $ffff, FMonitorBug.Version]), ShowAboutForm));
   MainPopupMenu.Items.Add(CreateMenuItem(Format('-', []), nil));
 
   if FMonitorBug <> nil then
